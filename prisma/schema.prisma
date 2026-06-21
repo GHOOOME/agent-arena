@@ -47,7 +47,7 @@ model WorkWindow {
   id              String             @id @default(cuid())
   workId          String
   modelSlug       String
-  runtimeKind     String             @default("token_plan")
+  runtimeKind     String             @default("codex_cli")
   name            String
   systemPrompt    String?            @db.Text
   memorySummary   String?            @db.Text

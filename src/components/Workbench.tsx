@@ -34,6 +34,7 @@ import { useWindowChat } from '@/hooks/useWindowChat';
 import { useWorkbenchStore } from '@/stores/useWorkbenchStore';
 import { WorkRecord, WorkSummary } from '@/types';
 import { DEFAULT_WORK_WINDOW_PERMISSION } from '@/lib/workPermissions';
+import { defaultRuntimeForProject } from '@/lib/workRuntime';
 
 type ProjectEntry = {
   name: string;
@@ -113,7 +114,7 @@ export default function Workbench() {
   const [savingWork, setSavingWork] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const [addWindowRuntime, setAddWindowRuntime] = useState('token_plan');
+  const [addWindowRuntime, setAddWindowRuntime] = useState('codex_cli');
   const [newWorkOpen, setNewWorkOpen] = useState(false);
   const [workSettingsOpen, setWorkSettingsOpen] = useState(false);
   const [addWindowOpen, setAddWindowOpen] = useState(false);
@@ -193,17 +194,17 @@ export default function Workbench() {
   })), [textModels]);
   const runtimeOptions = useMemo(() => [
     {
-      value: 'token_plan',
-      label: 'Token Plan Agent',
-      description: '使用内置 Arena 工具循环，消耗阿里云 Token Plan。',
-    },
-    {
       value: 'codex_cli',
       label: 'Codex CLI Runtime',
       description: activeWork?.projectPath
         ? '隔离 CODEX_HOME 调用 Codex CLI，模型请求仍走 Token Plan。'
         : '需要先绑定项目，纯对话工作不可用。',
       disabled: !activeWork?.projectPath,
+    },
+    {
+      value: 'token_plan',
+      label: 'Token Plan Agent',
+      description: '使用内置 Arena 工具循环，消耗阿里云 Token Plan。',
     },
   ], [activeWork?.projectPath]);
   const selectedWindows = activeWork?.windows.filter((window) => selectedWindowIds.includes(window.id)) || [];
@@ -270,10 +271,8 @@ export default function Workbench() {
   }, [bootstrap]);
 
   useEffect(() => {
-    if (!activeWork?.projectPath && addWindowRuntime === 'codex_cli') {
-      setAddWindowRuntime('token_plan');
-    }
-  }, [activeWork?.projectPath, addWindowRuntime]);
+    setAddWindowRuntime(defaultRuntimeForProject(activeWork?.projectPath));
+  }, [activeWork?.id, activeWork?.projectPath]);
 
   useEffect(() => {
     if (config) {
@@ -455,7 +454,7 @@ export default function Workbench() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelSlug: addWindowModel,
-          runtimeKind: addWindowRuntime,
+          runtimeKind: activeWork.projectPath ? addWindowRuntime : 'token_plan',
           permissionMode: DEFAULT_WORK_WINDOW_PERMISSION,
         }),
       }));

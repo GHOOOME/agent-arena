@@ -11,7 +11,7 @@ Agent Arena 是一个本机/可信局域网使用的多模型 Agent 工作台。
 - 文本、推理、视觉理解模型并发流式对比。
 - 每个窗口独立会话记忆，避免上下文互相污染。
 - 本地项目 Agent：读取项目、创建窗口工作区、应用安全补丁、运行白名单命令、启动预览。
-- Codex CLI Runtime 可选接入：使用隔离 `.codex-runtime`，模型请求仍走 Token Plan。
+- Codex CLI Runtime 是绑定项目窗口的默认执行引擎：使用隔离 `.codex-runtime`，模型请求仍走 Token Plan。
 - 图片生成模型面板，生成图会保存到本地 `public/generated`。
 - 429 限流退避重试，默认至少 4 路并发。
 
@@ -23,7 +23,7 @@ Agent Arena 是一个本机/可信局域网使用的多模型 Agent 工作台。
 - 一个阿里云 Token Plan API Key。
 - macOS 推荐使用，系统文件夹选择器目前只在 macOS 上启用。
 - 桌面模式使用 Electron，安装依赖时会下载 Electron 二进制。
-- 可选：安装 `codex` CLI 后才能使用 `Codex CLI Runtime` 窗口。
+- 安装 `codex` CLI。绑定项目的窗口默认使用 `Codex CLI Runtime`；纯对话窗口会自动使用内置 Token Plan Agent。
 
 ## Quick Start
 

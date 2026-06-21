@@ -2,8 +2,9 @@ import { prisma } from './db';
 import { ensureModel, syncModelCatalog } from './models';
 import { serializeRace, serializeWork, serializeWorkSummary } from './serializers';
 import { DEFAULT_WORK_WINDOW_PERMISSION, isWorkWindowPermission } from '@/lib/workPermissions';
+import { defaultRuntimeForProject, normalizeWorkWindowRuntime } from '@/lib/workRuntime';
 import { DEFAULT_SELECTED_MODEL_SLUGS, TOKEN_PLAN_MODELS } from '@/lib/models';
-import { WorkWindowPermission, WorkWindowRuntimeKind } from '@/types';
+import { WorkWindowPermission } from '@/types';
 import { ensureWorkspaceBranch } from './workspaceBranches';
 
 function compactTitle(value?: string | null) {
@@ -23,10 +24,6 @@ function defaultModelSlug() {
   return DEFAULT_SELECTED_MODEL_SLUGS.find((slug) =>
     TOKEN_PLAN_MODELS.some((model) => model.slug === slug && !model.capabilities.includes('image'))
   ) || 'qwen3.7-max';
-}
-
-function normalizeRuntimeKind(value: unknown): WorkWindowRuntimeKind {
-  return value === 'codex_cli' ? 'codex_cli' : 'token_plan';
 }
 
 export async function listWorks() {
@@ -84,15 +81,17 @@ export async function createWork(params: {
   await syncModelCatalog();
   const modelSlug = defaultModelSlug();
   await ensureModel(modelSlug);
+  const projectPath = normalizeNullableText(params.projectPath) ?? null;
   const work = await prisma.work.create({
     data: {
       title: compactTitle(params.title || params.goal),
       goal: params.goal?.trim() || null,
-      projectPath: normalizeNullableText(params.projectPath) ?? null,
+      projectPath,
       windows: {
         create: {
           name: '窗口 A',
           modelSlug,
+          runtimeKind: defaultRuntimeForProject(projectPath),
           permissionMode: DEFAULT_WORK_WINDOW_PERMISSION,
           sortOrder: 0,
         },
@@ -146,6 +145,26 @@ export async function updateWork(params: {
 
   const nextProjectPath = normalizeNullableText(params.projectPath) ?? null;
   if (params.projectPath !== undefined && nextProjectPath !== previous.projectPath) {
+    if (nextProjectPath) {
+      await prisma.workWindow.updateMany({
+        where: {
+          workId: params.id,
+          archived: false,
+          runtimeKind: 'token_plan',
+        },
+        data: { runtimeKind: defaultRuntimeForProject(nextProjectPath) },
+      });
+    } else {
+      await prisma.workWindow.updateMany({
+        where: {
+          workId: params.id,
+          archived: false,
+          runtimeKind: 'codex_cli',
+        },
+        data: { runtimeKind: defaultRuntimeForProject(null) },
+      });
+    }
+
     await Promise.all(
       previous.windows.map((window) =>
         ensureWorkspaceBranch({
@@ -182,7 +201,7 @@ export async function createWorkWindow(params: {
   const permissionMode: WorkWindowPermission = isWorkWindowPermission(params.permissionMode)
     ? params.permissionMode
     : DEFAULT_WORK_WINDOW_PERMISSION;
-  const runtimeKind = normalizeRuntimeKind(params.runtimeKind);
+  const runtimeKind = normalizeWorkWindowRuntime(params.runtimeKind, work.projectPath);
   const sortOrder = work._count.windows;
   const window = await prisma.workWindow.create({
     data: {
@@ -214,7 +233,10 @@ export async function updateWorkWindow(params: {
   permissionMode?: unknown;
   archived?: boolean;
 }) {
-  const window = await prisma.workWindow.findUnique({ where: { id: params.id } });
+  const window = await prisma.workWindow.findUnique({
+    where: { id: params.id },
+    include: { work: true },
+  });
   if (!window) throw new Error('找不到指定窗口。');
 
   if (params.modelSlug) {
@@ -229,7 +251,9 @@ export async function updateWorkWindow(params: {
     data: {
       ...(params.name !== undefined ? { name: params.name.trim() || window.name } : {}),
       ...(params.modelSlug ? { modelSlug: params.modelSlug } : {}),
-      ...(params.runtimeKind !== undefined ? { runtimeKind: normalizeRuntimeKind(params.runtimeKind) } : {}),
+      ...(params.runtimeKind !== undefined
+        ? { runtimeKind: normalizeWorkWindowRuntime(params.runtimeKind, window.work.projectPath) }
+        : {}),
       ...(params.systemPrompt !== undefined ? { systemPrompt: normalizeNullableText(params.systemPrompt) ?? null } : {}),
       ...(params.clearMemory ? { memorySummary: null, memoryUpdatedAt: null } : {}),
       ...(params.permissionMode !== undefined && isWorkWindowPermission(params.permissionMode)
