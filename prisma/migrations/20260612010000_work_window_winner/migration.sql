@@ -1,0 +1,1 @@
+ALTER TABLE "WorkWindow" ADD COLUMN "isWinner" BOOLEAN NOT NULL DEFAULT false;

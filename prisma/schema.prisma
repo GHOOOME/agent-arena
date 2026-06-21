@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Model {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  name         String
+  provider     String
+  family       String
+  color        String
+  description  String
+  bestFor      String[]       @default([])
+  capabilities String[]       @default([])
+  tools        String[]       @default([])
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  conversations Conversation[]
+  runResults   RunResult[]
+  assets       Asset[]
+  workWindows  WorkWindow[]
+  raceResults  RaceParticipant[]
+}
+
+model Work {
+  id          String       @id @default(cuid())
+  title       String
+  goal        String?      @db.Text
+  projectPath String?
+  status      String       @default("active")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  archivedAt  DateTime?
+  windows     WorkWindow[]
+  races       Race[]
+
+  @@index([status, updatedAt])
+}
+
+model WorkWindow {
+  id              String             @id @default(cuid())
+  workId          String
+  modelSlug       String
+  runtimeKind     String             @default("token_plan")
+  name            String
+  systemPrompt    String?            @db.Text
+  memorySummary   String?            @db.Text
+  memoryUpdatedAt DateTime?
+  permissionMode  String             @default("read_only")
+  branchStatus    String             @default("not_created")
+  previewPort     Int?
+  sortOrder       Int                @default(0)
+  archived        Boolean            @default(false)
+  isWinner        Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  work            Work               @relation(fields: [workId], references: [id], onDelete: Cascade)
+  model           Model              @relation(fields: [modelSlug], references: [slug], onDelete: Cascade)
+  messages        WindowMessage[]
+  raceResults     RaceParticipant[]
+  workspaceBranch WorkspaceBranch?
+  toolRuns        ToolRun[]
+
+  @@index([workId, sortOrder])
+  @@index([runtimeKind, updatedAt])
+  @@index([modelSlug, updatedAt])
+}
+
+model WindowMessage {
+  id                String           @id @default(cuid())
+  workWindowId      String
+  raceParticipantId String?
+  role              String
+  content           String           @db.Text
+  reasoning         String?          @db.Text
+  attachments       Json?
+  usage             Json?
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+  window            WorkWindow       @relation(fields: [workWindowId], references: [id], onDelete: Cascade)
+  raceParticipant   RaceParticipant? @relation(fields: [raceParticipantId], references: [id], onDelete: SetNull)
+
+  @@index([workWindowId, createdAt])
+  @@index([raceParticipantId])
+}
+
+model Race {
+  id                  String            @id @default(cuid())
+  workId              String
+  prompt              String            @db.Text
+  status              String            @default("queued")
+  maxParallelRequests Int               @default(4)
+  createdAt           DateTime          @default(now())
+  completedAt         DateTime?
+  work                Work              @relation(fields: [workId], references: [id], onDelete: Cascade)
+  participants        RaceParticipant[]
+
+  @@index([workId, createdAt])
+}
+
+model RaceParticipant {
+  id             String          @id @default(cuid())
+  raceId         String
+  workWindowId   String
+  modelSlug      String
+  status         String          @default("queued")
+  content        String?         @db.Text
+  reasoning      String?         @db.Text
+  error          String?         @db.Text
+  usage          Json?
+  latencyMs      Int?
+  startedAt      DateTime        @default(now())
+  completedAt    DateTime?
+  race           Race            @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  window         WorkWindow      @relation(fields: [workWindowId], references: [id], onDelete: Cascade)
+  model          Model           @relation(fields: [modelSlug], references: [slug], onDelete: Cascade)
+  messages       WindowMessage[]
+
+  @@index([raceId])
+  @@index([workWindowId, startedAt])
+  @@index([modelSlug, startedAt])
+}
+
+model WorkspaceBranch {
+  id              String     @id @default(cuid())
+  workWindowId    String     @unique
+  projectPath     String?
+  branchName      String?
+  worktreePath    String?
+  baseCommit      String?
+  currentCommit   String?
+  status          String     @default("not_created")
+  lastDiffSummary String?    @db.Text
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  window          WorkWindow @relation(fields: [workWindowId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+}
+
+model ToolRun {
+  id           String     @id @default(cuid())
+  workWindowId String
+  toolName     String
+  status       String
+  input        Json?
+  output       String?    @db.Text
+  error        String?    @db.Text
+  startedAt    DateTime   @default(now())
+  completedAt  DateTime?
+  durationMs   Int?
+  window       WorkWindow @relation(fields: [workWindowId], references: [id], onDelete: Cascade)
+
+  @@index([workWindowId, startedAt])
+  @@index([toolName, startedAt])
+}
+
+model Conversation {
+  id         String      @id @default(cuid())
+  modelSlug  String
+  title      String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  model      Model       @relation(fields: [modelSlug], references: [slug], onDelete: Cascade)
+  messages   Message[]
+  runResults RunResult[]
+  assets     Asset[]
+
+  @@index([modelSlug, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String
+  content        String       @db.Text
+  reasoning      String?      @db.Text
+  attachments    Json?
+  usage          Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model Run {
+  id        String      @id @default(cuid())
+  prompt    String      @db.Text
+  createdAt DateTime    @default(now())
+  results   RunResult[]
+}
+
+model RunResult {
+  id             String        @id @default(cuid())
+  runId          String
+  conversationId String
+  modelSlug      String
+  status         String
+  content        String?       @db.Text
+  reasoning      String?       @db.Text
+  error          String?       @db.Text
+  usage          Json?
+  latencyMs      Int?
+  startedAt      DateTime      @default(now())
+  completedAt    DateTime?
+  run            Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  model          Model         @relation(fields: [modelSlug], references: [slug], onDelete: Cascade)
+  assets         Asset[]
+
+  @@index([runId])
+  @@index([conversationId])
+  @@index([modelSlug, startedAt])
+}
+
+model Asset {
+  id             String        @id @default(cuid())
+  type           String
+  modelSlug      String?
+  conversationId String?
+  runResultId    String?
+  localPath      String
+  publicUrl      String
+  remoteUrl      String?
+  prompt         String?       @db.Text
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  model          Model?        @relation(fields: [modelSlug], references: [slug], onDelete: SetNull)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  runResult      RunResult?    @relation(fields: [runResultId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([runResultId])
+  @@index([modelSlug, createdAt])
+}
